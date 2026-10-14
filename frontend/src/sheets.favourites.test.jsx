@@ -25,6 +25,11 @@ function renderTop() {
 
 const names = host => [...host.querySelectorAll('.item .tt')].map(el => el.textContent)
 const starOf = host => host.querySelector('.fav-btn')
+// The muscle filter sheet (the three buttons replaced the chip strips) is where Favourites lives.
+const filterBtn = (host, name) => [...host.querySelectorAll('.filter-btn')]
+  .find(b => b.querySelector('.fb-name').textContent.trim() === name)
+const openSheet = (host, name) => { act(() => filterBtn(host, name).click()); return renderTop() }
+const option = (sheet, text) => [...sheet.querySelectorAll('.menu-item')].find(e => e.textContent.trim() === text)
 
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -80,17 +85,19 @@ describe('exercise picker', () => {
     expect(rows[2].querySelector('.tt .fav-star')).toBeNull()
   })
 
-  it('offers a Favourites chip only when there are favourites, and it filters to them', () => {
+  it('offers Favourites in the muscle filter only when there are favourites, and filters to them', () => {
     exercisePicker(vi.fn())
     let host = renderTop()
-    const chip = h => [...h.querySelectorAll('.chips .chip')].find(b => b.textContent.startsWith('Favourites'))
-    expect(chip(host)).toBeUndefined()
+    // No favourites yet: the muscle filter sheet has no Favourites entry.
+    expect(option(openSheet(host, 'Muscle'), 'Favourites (2)')).toBeFalsy()
+
     useUI.setState({ sheets: [] })
     useStore.setState(s => ({ S: { ...s.S, favEx: [EXDB[5].id, EXDB[9].id] } }))
     exercisePicker(vi.fn())
     host = renderTop()
-    expect(chip(host).textContent).toBe('Favourites (2)')
-    act(() => chip(host).click())
+    const fav = option(openSheet(host, 'Muscle'), 'Favourites (2)')
+    expect(fav).toBeTruthy()
+    act(() => fav.click())
     expect(names(host)).toEqual([EXDB[5].n, EXDB[9].n])
   })
 })

@@ -7,6 +7,7 @@ import { resolve } from 'node:path'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Library from './Library.jsx'
+import { useUI } from '../store/useUI.js'
 import { EXDB } from '../lib/exercises.js'
 import { CASED_NAME_LANGS, EXERCISE_NAME_LANGS, _setLangState } from '../lib/i18n-core.js'
 
@@ -33,6 +34,23 @@ function render() {
   mounted.push(root)
   act(() => root.render(<Library />))
   return host
+}
+// The muscle filter's button opens a pick-list sheet; render whatever sheet is on top.
+function renderSheet() {
+  const sheet = useUI.getState().sheets.at(-1)
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  mounted.push(root)
+  act(() => root.render(sheet.render(() => useUI.getState().closeSheet(sheet.id))))
+  return host
+}
+const filterBtn = host => [...host.querySelectorAll('.filter-btn')]
+  .find(b => b.querySelector('.fb-name').textContent.trim() === 'Muscle')
+const pickBodyPart = (host, text) => {
+  act(() => filterBtn(host).click())
+  const sheet = renderSheet()
+  act(() => [...sheet.querySelectorAll('.menu-item')].find(e => e.textContent.trim() === text).click())
 }
 const names = host => [...host.querySelectorAll('.item .tt')].map(el => el.textContent).slice(1)   // drop "Create your own"
 const cssSource = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8')
@@ -78,8 +96,7 @@ describe('Library favourites', () => {
     const legs = EXDB.find(e => e.bp !== 'chest')
     mocks.S.favEx = [chest[4].id, legs.id]
     const host = render()
-    const chip = [...host.querySelectorAll('.chips .chip')].find(b => b.textContent === 'chest')
-    act(() => chip.click())
+    pickBodyPart(host, 'chest')
     const shown = names(host)
     expect(shown[0]).toBe(chest[4].n)
     expect(shown).not.toContain(legs.n)

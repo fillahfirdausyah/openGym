@@ -30,9 +30,14 @@ function type(el, value) {
   Object.getOwnPropertyDescriptor(el.constructor.prototype, 'value').set.call(el, value)
   el.dispatchEvent(new Event('input', { bubbles: true }))
 }
-const chip = (host, text) => [...host.querySelectorAll('.chips .chip')].find(b => b.textContent.trim() === text)
 const clear = host => host.querySelector('.search .clear')
 const count = host => host.querySelector('.search .search-count')
+// Pick a body part from the muscle filter's sheet (the three buttons replaced the chip strips).
+const pickBodyPart = (host, bp) => {
+  act(() => [...host.querySelectorAll('.filter-btn')].find(b => b.querySelector('.fb-name').textContent.trim() === 'Muscle').click())
+  const sheet = renderTopSheet()
+  act(() => [...sheet.querySelectorAll('.menu-item')].find(e => e.textContent.trim() === bp).click())
+}
 
 beforeEach(() => {
   useUI.setState({ sheets: [], toastMsg: '' })
@@ -62,7 +67,7 @@ describe('exercise search clear button', () => {
 
     it(`${where}: clears only the text; a body-part filter keeps its count`, () => {
       const host = open()
-      act(() => chip(host, 'neck').click())
+      pickBodyPart(host, 'neck')
       act(() => type(host.querySelector('.search input'), 'stretch'))
       act(() => clear(host).click())
       expect(host.querySelector('.search input').value).toBe('')

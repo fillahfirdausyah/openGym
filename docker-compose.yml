@@ -73,5 +73,29 @@ services:
       # MEDIA_VIDEO_MAX_MB (40 by default), which the api service reads from .env.
       - MEDIA_UPLOAD_MAX=${MEDIA_UPLOAD_MAX:-48m}
 
+  # Read-only MCP bridge over streamable HTTP — lets a remote LLM client (Hermes, Claude
+  # Desktop, Cursor) read routines, workouts, 1RMs and muscle balance from the same data volume
+  # the api writes. Mounted read-only and gated by OPENGYM_TOKEN, so it can sit behind a public
+  # Dokploy domain without risking the data. OPENGYM_TOKEN is required: the container exits if it
+  # is unset. Point your agent's MCP client at the domain's / (POST) with an Authorization bearer.
+  mcp:
+    build:
+      context: .
+      dockerfile: mcp/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '${MCP_PORT:-3200}:3200'
+    environment:
+      - PORT=3200
+      - OPENGYM_DATA=/data
+      - OPENGYM_TOKEN=${OPENGYM_TOKEN:-}
+      - OPENGYM_UID=${OPENGYM_UID:-}
+    volumes:
+      - opengym-data:/data:ro
+    networks:
+      default:
+        aliases:
+          - opengym-mcp
+
 volumes:
   opengym-data:

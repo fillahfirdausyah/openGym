@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { EXDB, BODYPARTS, allExercises, equipmentOf, byCategory, searchExercises, similarExercises } from '../lib/exercises.js'
@@ -11,8 +11,9 @@ import { Thumb } from '../components/Media.jsx'
 import { exerciseDetailSheet, addToRoutineSheet, customExSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import ExerciseViewToggle from '../components/ExerciseViewToggle.jsx'
+import ExerciseFilterBar from '../components/ExerciseFilterBar.jsx'
 import { Button } from '../components/ui.jsx'
-import { tappable, useRevealActiveChip } from '../lib/use-sheet-keyboard.js'
+import { tappable } from '../lib/use-sheet-keyboard.js'
 import { useAutoMore } from '../lib/use-auto-more.js'
 import { isFav, sortFavouritesFirst, sortYoursFirst, usageOf } from '../lib/favourites.js'
 
@@ -25,7 +26,6 @@ export default function Library() {
   const [cat, setCat] = useState('')
   const [showAll, setShowAll] = useState(false)   // ignore the active equipment profile for this session
   const [shown, setShown] = useState(40)
-  const bpStrip = useRef(null), eqStrip = useRef(null), catStrip = useRef(null)
   const moreRef = useAutoMore(() => setShown(s => s + 40))
   const profile = activeProfile(S)
   // Your own exercises, counted the way the list below shows them (allExercises puts every
@@ -44,9 +44,6 @@ export default function Library() {
   const narrowedList = eqOn ? eqFiltered.filter(e => e.eq === eqOn) : eqFiltered
   const usage = useMemo(() => (q.trim() ? usageOf(S) : null), [q, S.routines, S.workouts])
   const f = usage ? sortYoursFirst(narrowedList, S, usage) : sortFavouritesFirst(narrowedList, S)
-  useRevealActiveChip(bpStrip, bp)
-  useRevealActiveChip(eqStrip, eqOn)
-  useRevealActiveChip(catStrip, catOn)
   // A live count at the end of the search field while a search or filter narrows the list
   // (idea and first version: GitLab !31) — how many are left, before scrolling to find out.
   const narrowed = !!(q.trim() || bp || eqOn || catOn)
@@ -86,21 +83,17 @@ export default function Library() {
         {showAll ? t('Filter by "{0}"', profile.name) : t('Show all equipment')}
       </button>
     </div>}
-    {/* Changing body part keeps the equipment filter (issue #71): the eqOn fallback above drops
-        it only for the current view if the new body part has nothing under it, without forgetting
-        the choice. "All" clears it, since it spans every body part. */}
-    <div className="chips" ref={bpStrip} style={{ marginBottom: eqOpts.length > 1 || catOpts.length > 1 ? 8 : 12 }}>
-      <button className={'chip nocap' + (!bp ? ' on' : '')} onClick={() => { setBp(''); setEq(''); setShown(40) }}>{t('All')}</button>
-      {BODYPARTS.map(b => <button key={b} className={'chip' + (bp === b ? ' on' : '')} onClick={() => { setBp(b); setShown(40) }}>{t(b)}</button>)}
-    </div>
-    {catOpts.length > 1 && <div className="chips" ref={catStrip} style={{ marginBottom: 8 }}>
-      <button className={'chip nocap' + (!catOn ? ' on' : '')} onClick={() => { setCat(''); setShown(40) }}>{t('Any type')}</button>
-      {catOpts.map(x => <button key={x} className={'chip' + (catOn === x ? ' on' : '')} onClick={() => { setCat(x); setShown(40) }}>{t(x)}</button>)}
-    </div>}
-    {eqOpts.length > 1 && <div className="chips" ref={eqStrip} style={{ marginBottom: 12 }}>
-      <button className={'chip nocap' + (!eqOn ? ' on' : '')} onClick={() => { setEq(''); setShown(40) }}>{t('Any equipment')}</button>
-      {eqOpts.map(x => <button key={x} className={'chip' + (eqOn === x ? ' on' : '')} onClick={() => { setEq(x); setShown(40) }}>{t(x)}</button>)}
-    </div>}
+    {/* Three filter buttons (Hevy-style) replace the three chip strips: muscle group, type,
+        equipment. Changing body part keeps the equipment filter (issue #71); "All" clears it,
+        since it spans every body part. */}
+    <ExerciseFilterBar
+      muscle={{ name: t('Muscle'), value: bp, onChange: v => { setBp(v); if (!v) setEq(''); setShown(40) },
+        options: [{ value: '', label: t('All') }, ...BODYPARTS.map(b => ({ value: b, label: t(b) }))] }}
+      type={catOpts.length > 1 ? { name: t('Type'), value: catOn, onChange: v => { setCat(v); setShown(40) },
+        options: [{ value: '', label: t('Any type') }, ...catOpts.map(x => ({ value: x, label: t(x) }))] } : null}
+      equipment={eqOpts.length > 1 ? { name: t('Equipment'), value: eqOn, onChange: v => { setEq(v); setShown(40) },
+        options: [{ value: '', label: t('Any equipment') }, ...eqOpts.map(x => ({ value: x, label: t(x) }))] } : null}
+    />
     <div className={'list' + (S.exerciseView === 'cards' ? ' ex-grid' : '')}>
       <div className="item ex-new" {...tappable(() => customExSheet(null, ex => exerciseDetailSheet(ex), q.trim()))}>
         <div className="thumb thumb-x"><Icon name="plusCircle" /></div>
@@ -114,4 +107,3 @@ export default function Library() {
     {f.length > shown && <><div style={{ height: 10 }} /><Button ref={moreRef} onClick={() => setShown(s => s + 40)}>{t('Show more')}</Button></>}
   </>
 }
-

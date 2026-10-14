@@ -28,6 +28,7 @@ import { glyphOf, GLYPH_GROUPS, DEFAULT_GLYPH } from './lib/glyphs.js'
 import BodyMap from './components/BodyMap.jsx'
 import MuscleExplorer from './components/MuscleExplorer.jsx'
 import ExerciseViewToggle from './components/ExerciseViewToggle.jsx'
+import ExerciseFilterBar from './components/ExerciseFilterBar.jsx'
 import { sameMuscleFirst, swapMuscleOf } from './lib/similar-exercises.js'
 import { exerciseMuscleSnapshot, loadOfWorkouts, MUSCLES, MUSCLE_NAME, muscleWeightsOf, normalizeMuscleGroups, hasExplicitMuscleMetadata, inMuscleOrder } from './lib/muscles.js'
 import { parseImport, mergeImport } from './lib/import-csv.js'
@@ -48,7 +49,7 @@ import { isWarmupRow, hasCompletedWork } from './lib/workout-model.js'
 import { saveSessionAsRoutine } from './lib/session-routines.js'
 import { repeatSessionEntries } from './lib/session-repeat.js'
 import { swapActiveExercise } from './lib/active-exercise-swap.js'
-import { useSheetKeyboard, useRevealActiveChip, tappable } from './lib/use-sheet-keyboard.js'
+import { useSheetKeyboard, tappable } from './lib/use-sheet-keyboard.js'
 import { useAutoMore } from './lib/use-auto-more.js'
 import { isFav, toggleFav, sortFavouritesFirst, sortYoursFirst } from './lib/favourites.js'
 import { buildSessionEntries, buildPlannedEntry, builtOutOfProgression } from './lib/session-start.js'
@@ -1293,7 +1294,6 @@ function ExercisePicker({ onPick, title, close, like }) {
   const [shown, setShown] = useState(50)
   const [byMuscle, setByMuscle] = useState(false)
   const searchRef = useRef(null)
-  const bpStrip = useRef(null), eqStrip = useRef(null), catStrip = useRef(null)
   const onSearchFocus = useSheetKeyboard(searchRef)
   const moreRef = useAutoMore(() => setShown(s => s + 50))
   const all = allExercises(st)
@@ -1318,11 +1318,19 @@ function ExercisePicker({ onPick, title, close, like }) {
   const chosenCount = Object.keys(usage).length
   const favCount = (st.favEx || []).length
   const special = bp === '★' || bp === '☆'
+  // The muscle filter's scopes: favourites and chosen sit beside the body parts (they are
+  // cross-body-part views, so picking one clears a stale equipment filter); same-muscle appears
+  // only when a swap/replace hands the picker an exercise to be away from.
+  const setMuscle = v => { setBp(v); if (v === '☆' || v === '★') setEq(''); setShown(50) }
+  const muscleOptions = [
+    { value: '', label: t('All') },
+    ...(likeTg ? [{ value: SAME, label: t('Same muscle: {0}', t(MUSCLE_NAME[likeTg] || likeTg)), icon: 'figureStrength' }] : []),
+    ...(favCount > 0 ? [{ value: '☆', label: t('Favourites') + ` (${favCount})`, icon: 'starFill' }] : []),
+    ...(chosenCount > 0 ? [{ value: '★', label: t('Chosen') + ` (${chosenCount})`, icon: 'starFill' }] : []),
+    ...BODYPARTS.map(b => ({ value: b, label: t(b) })),
+  ]
   // The Library's live result count (GitLab !31), for the same reason: how many are left.
   const narrowed = !!(q.trim() || bp || eqOn || catOn)
-  useRevealActiveChip(bpStrip, bp)
-  useRevealActiveChip(eqStrip, eqOn)
-  useRevealActiveChip(catStrip, catOn)
   // Close but not exact (a typo too many, most of the words, a similar name), listed under the
   // results once you have scrolled to their end, so a search almost never ends on nothing.
   // Worked out a beat behind the typing (useDeferredValue): the list itself never waits for it.
@@ -1367,25 +1375,17 @@ function ExercisePicker({ onPick, title, close, like }) {
         {showAll ? t('Filter by "{0}"', profile.name) : t('Show all equipment')}
       </button>
     </div>}
-    {/* Changing muscle group keeps the equipment filter: if it still has exercises under the new
-        group the filter stays applied, and if not the eqOn fallback above drops it for this view
-        without forgetting the choice (issue #71). The favourites/chosen chips still clear it —
-        those are cross-body-part views where a stale equipment filter would be confusing. */}
-    <div className="chips" ref={bpStrip} style={{ margin: eqOpts.length > 1 || catOpts.length > 1 ? '10px 0 6px' : '10px 0' }}>
-      {likeTg && <button className={'chip nocap' + (bp === SAME ? ' on' : '')} onClick={() => { setBp(SAME); setShown(50) }}><Icon name="figureStrength" style={{ fontSize: 12, display: 'inline-block', marginInlineEnd: 4, verticalAlign: '-1px' }} />{t('Same muscle: {0}', t(MUSCLE_NAME[likeTg] || likeTg))}</button>}
-      {favCount > 0 && <button className={'chip' + (bp === '☆' ? ' on' : '')} onClick={() => { setBp('☆'); setEq(''); setShown(50) }}><Icon name="starFill" className="fav-star" />{t('Favourites')} ({favCount})</button>}
-      {chosenCount > 0 && <button className={'chip' + (bp === '★' ? ' on' : '')} onClick={() => { setBp('★'); setEq(''); setShown(50) }}><Icon name="starFill" style={{ fontSize: 12, display: 'inline-block', marginInlineEnd: 4, verticalAlign: '-1px' }} />{t('Chosen')} ({chosenCount})</button>}
-      <button className={'chip nocap' + (!bp ? ' on' : '')} onClick={() => { setBp(''); setShown(50) }}>{t('All')}</button>
-      {BODYPARTS.map(b => <button key={b} className={'chip' + (bp === b ? ' on' : '')} onClick={() => { setBp(b); setShown(50) }}>{t(b)}</button>)}
-    </div>
-    {catOpts.length > 1 && <div className="chips" ref={catStrip} style={{ marginBottom: eqOpts.length > 1 ? 6 : 10 }}>
-      <button className={'chip nocap' + (!catOn ? ' on' : '')} onClick={() => { setCat(''); setShown(50) }}>{t('Any type')}</button>
-      {catOpts.map(x => <button key={x} className={'chip' + (catOn === x ? ' on' : '')} onClick={() => { setCat(x); setShown(50) }}>{t(x)}</button>)}
-    </div>}
-    {eqOpts.length > 1 && <div className="chips" ref={eqStrip} style={{ marginBottom: 10 }}>
-      <button className={'chip nocap' + (!eqOn ? ' on' : '')} onClick={() => { setEq(''); setShown(50) }}>{t('Any equipment')}</button>
-      {eqOpts.map(x => <button key={x} className={'chip' + (eqOn === x ? ' on' : '')} onClick={() => { setEq(x); setShown(50) }}>{t(x)}</button>)}
-    </div>}
+    {/* Three filter buttons (Hevy-style) replace the three chip strips: muscle group, type,
+        equipment. Changing muscle group keeps the equipment filter (issue #71); the favourites
+        and chosen scopes still clear it — those are cross-body-part views where a stale
+        equipment filter would be confusing. */}
+    <ExerciseFilterBar
+      muscle={{ name: t('Muscle'), value: bp, onChange: setMuscle, options: muscleOptions }}
+      type={catOpts.length > 1 ? { name: t('Type'), value: catOn, onChange: v => { setCat(v); setShown(50) },
+        options: [{ value: '', label: t('Any type') }, ...catOpts.map(x => ({ value: x, label: t(x) }))] } : null}
+      equipment={eqOpts.length > 1 ? { name: t('Equipment'), value: eqOn, onChange: v => { setEq(v); setShown(50) },
+        options: [{ value: '', label: t('Any equipment') }, ...eqOpts.map(x => ({ value: x, label: t(x) }))] } : null}
+    />
     <div className={'list' + (st.exerciseView === 'cards' ? ' ex-grid' : '')}>
       {!special && <div className="item ex-new" {...tappable(() => customExSheet(null, ex => onPick(ex), q.trim()))}>
         <div className="thumb thumb-x"><Icon name="plusCircle" /></div>

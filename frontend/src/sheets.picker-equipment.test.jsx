@@ -2,7 +2,8 @@
 // Issue #71: choosing a body part after picking an equipment type used to reset the equipment
 // filter to "all equipment", even when the new muscle group still had exercises for it. The
 // per-body-part chips no longer clear the equipment selection; the eqOn fallback only drops it
-// for the current view when the new body part has nothing under that equipment.
+// for the current view when the new body part has nothing under that equipment. (Now behind the
+// three filter buttons: pick a value by opening the dimension's sheet.)
 import React, { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
@@ -22,11 +23,13 @@ function renderTop() {
   return host
 }
 
-// The two chip strips render in order: body parts first, then equipment. Grab a chip by its
-// visible label out of the whole picker.
-const chipByText = (host, text) =>
-  [...host.querySelectorAll('.chips .chip')].find(b => b.textContent.trim() === text)
+// The three filter buttons replace the chip strips: open a dimension's sheet and tap a value.
+const filterBtn = (host, name) => [...host.querySelectorAll('.filter-btn')]
+  .find(b => b.querySelector('.fb-name').textContent.trim() === name)
 const isOn = el => el.className.split(/\s+/).includes('on')
+const openSheet = (host, name) => { act(() => filterBtn(host, name).click()); return renderTop() }
+const option = (sheet, text) => [...sheet.querySelectorAll('.menu-item')].find(e => e.textContent.trim() === text)
+const pick = (host, name, value) => { const it = option(openSheet(host, name), value); act(() => it.click()); return host }
 
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -44,21 +47,19 @@ describe('exercise picker equipment filter', () => {
   // Both body parts have dumbbell exercises, so the filter must stay selected across the switch.
   it('keeps the dumbbell filter when switching from lower arms to upper arms', () => {
     exercisePicker(vi.fn())
-    const host = renderTop()
+    let host = renderTop()
 
     // lower arms → dumbbell
-    act(() => chipByText(host, 'lower arms').click())
-    const eqChip = chipByText(host, 'dumbbell')
-    expect(eqChip, 'dumbbell chip should be offered under lower arms').toBeTruthy()
-    act(() => eqChip.click())
-    expect(isOn(chipByText(host, 'dumbbell'))).toBe(true)
+    host = pick(host, 'Muscle', 'lower arms')
+    host = pick(host, 'Equipment', 'dumbbell')
+    expect(filterBtn(host, 'Equipment').querySelector('.fb-value').textContent).toBe('dumbbell')
+    expect(isOn(filterBtn(host, 'Equipment'))).toBe(true)
 
     // switch to upper arms — dumbbell is still valid there, so it must remain selected
-    act(() => chipByText(host, 'upper arms').click())
-    expect(isOn(chipByText(host, 'upper arms'))).toBe(true)
-    const eqAfter = chipByText(host, 'dumbbell')
-    expect(eqAfter, 'dumbbell chip should still be present under upper arms').toBeTruthy()
-    expect(isOn(eqAfter)).toBe(true)
-    expect(isOn(chipByText(host, 'Any equipment'))).toBe(false)
+    host = pick(host, 'Muscle', 'upper arms')
+    expect(isOn(filterBtn(host, 'Muscle'))).toBe(true)
+    expect(filterBtn(host, 'Muscle').querySelector('.fb-value').textContent).toBe('upper arms')
+    expect(filterBtn(host, 'Equipment').querySelector('.fb-value').textContent).toBe('dumbbell')
+    expect(isOn(filterBtn(host, 'Equipment'))).toBe(true)
   })
 })

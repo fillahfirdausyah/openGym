@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 // Issue #521: the workout's "Add exercise" picker showed the Muscle and Equipment chip rows but not
-// the Type row the Exercise browser has (strength, calisthenics, stretching...). Same row, same
-// fallback: a type the muscle group narrows away is ignored for that view, not forgotten.
+// the Type row the Exercise browser has (strength, calisthenics, stretching...). Same filter, same
+// fallback: a type the muscle group narrows away is ignored for that view, not forgotten. (Now
+// behind the three filter buttons.)
 import React, { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
@@ -23,9 +24,13 @@ function renderTop() {
   return host
 }
 
-const chipByText = (host, text) =>
-  [...host.querySelectorAll('.chips .chip')].find(b => b.textContent.trim() === text)
+// The three filter buttons replace the chip strips: open a dimension's sheet and tap a value.
+const filterBtn = (host, name) => [...host.querySelectorAll('.filter-btn')]
+  .find(b => b.querySelector('.fb-name').textContent.trim() === name)
 const isOn = el => el.className.split(/\s+/).includes('on')
+const openSheet = (host, name) => { act(() => filterBtn(host, name).click()); return renderTop() }
+const option = (sheet, text) => [...sheet.querySelectorAll('.menu-item')].find(e => e.textContent.trim() === text)
+const pick = (host, name, value) => { const it = option(openSheet(host, name), value); act(() => it.click()); return host }
 // Every row's add button carries the exercise's name, so it tells which exercises are listed.
 const listed = host => [...host.querySelectorAll('.list .item button[aria-label]')]
   .map(b => b.getAttribute('aria-label'))
@@ -42,22 +47,22 @@ afterEach(() => {
 })
 
 describe('exercise picker type filter', () => {
-  it('shows the Type row between the muscle groups and the equipment, like the Library', () => {
+  it('shows three filter buttons — muscle, type, equipment — like the Library', () => {
     exercisePicker(vi.fn())
     const host = renderTop()
-    const strips = [...host.querySelectorAll('.chips')]
-    expect(strips).toHaveLength(3)
-    expect(strips[1].querySelector('.chip').textContent.trim()).toBe('Any type')
-    expect(isOn(chipByText(host, 'Any type'))).toBe(true)
-    expect(chipByText(host, 'stretching')).toBeTruthy()
-    expect(strips[2].querySelector('.chip').textContent.trim()).toBe('Any equipment')
+    const names = [...host.querySelectorAll('.filter-btn')].map(b => b.querySelector('.fb-name').textContent.trim())
+    expect(names).toEqual(['Muscle', 'Type', 'Equipment'])
+    expect(filterBtn(host, 'Type').querySelector('.fb-value').textContent).toBe('Any type')
+    expect(isOn(filterBtn(host, 'Type'))).toBe(false)
+    expect(option(openSheet(host, 'Type'), 'stretching')).toBeTruthy()
+    expect(filterBtn(host, 'Equipment').querySelector('.fb-value').textContent).toBe('Any equipment')
   })
 
   it('narrows the list to the picked type', () => {
     exercisePicker(vi.fn())
-    const host = renderTop()
-    act(() => chipByText(host, 'stretching').click())
-    expect(isOn(chipByText(host, 'stretching'))).toBe(true)
+    let host = renderTop()
+    host = pick(host, 'Type', 'stretching')
+    expect(isOn(filterBtn(host, 'Type'))).toBe(true)
     const names = listed(host)
     expect(names.length).toBeGreaterThan(0)
     const catOf = new Map(EXDB.map(e => [`Add “${exerciseNameFor(e)}”`, e.cat]))
@@ -66,13 +71,15 @@ describe('exercise picker type filter', () => {
 
   it('keeps the type across a muscle group that has none of it, and picks it back up', () => {
     exercisePicker(vi.fn())
-    const host = renderTop()
-    act(() => chipByText(host, 'yoga').click())
-    // Lower arms have no yoga: the row drops the choice for this view instead of listing nothing.
-    act(() => chipByText(host, 'lower arms').click())
-    expect(chipByText(host, 'yoga')).toBeFalsy()
+    let host = renderTop()
+    host = pick(host, 'Type', 'yoga')
+    // Lower arms have no yoga: the button drops the choice for this view instead of listing nothing.
+    host = pick(host, 'Muscle', 'lower arms')
+    expect(filterBtn(host, 'Type').querySelector('.fb-value').textContent).toBe('Any type')
     expect(listed(host).length).toBeGreaterThan(0)
-    act(() => chipByText(host, 'back').click())
-    expect(isOn(chipByText(host, 'yoga'))).toBe(true)
+    // Back has yoga again: the choice comes back on its own.
+    host = pick(host, 'Muscle', 'back')
+    expect(filterBtn(host, 'Type').querySelector('.fb-value').textContent).toBe('yoga')
+    expect(isOn(filterBtn(host, 'Type'))).toBe(true)
   })
 })

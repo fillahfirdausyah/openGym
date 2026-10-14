@@ -40,6 +40,12 @@ function renderTop() {
 }
 const rows = host => host.querySelectorAll('.list > .item').length - 1   // drop "Create your own"
 const showMore = host => [...host.querySelectorAll('button')].find(b => b.textContent === 'Show more')
+// Pick a body part from the muscle filter's sheet (the three buttons replaced the chip strips).
+const pickBodyPart = (host, bp) => {
+  act(() => [...host.querySelectorAll('.filter-btn')].find(b => b.querySelector('.fb-name').textContent.trim() === 'Muscle').click())
+  const sheet = renderTop()
+  act(() => [...sheet.querySelectorAll('.menu-item')].find(e => e.textContent.trim() === bp).click())
+}
 
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true
@@ -89,7 +95,7 @@ describe('lists load their next page as you scroll', () => {
     const count = bp => EXDB.filter(e => e.bp === bp).length
     const bp = BODYPARTS.filter(b => count(b) > 40).sort((a, b) => count(a) - count(b))[0]
     const host = render(<Library />)
-    act(() => [...host.querySelectorAll('.chips .chip')].find(c => c.textContent === bp).click())
+    pickBodyPart(host, bp)
     for (let i = 0; i < 10 && showMore(host); i++) comeIntoView()
     expect(rows(host)).toBe(count(bp))
     expect(showMore(host)).toBeUndefined()

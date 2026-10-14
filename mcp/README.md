@@ -14,8 +14,9 @@ The numbers it answers with are computed by the **same pure functions the React 
 (`frontend/src/lib/*.js`) — `estimate1RM`, `loadOfWorkouts`, `effectiveRoutine`, etc. — so a
 "what's my bench 1RM?" answer matches the Stats screen exactly.
 
-> Phase 1 of a multi-phase plan. Read-only today; long-lived token auth + write tools are
-> planned but not shipped yet. See **Roadmap** below.
+> Read-only, over two transports: stdio (local, `src/index.js`) and streamable HTTP (remote,
+> `src/http.js` — see **Deploying over HTTP** below). Write tools are still planned but not
+> shipped yet. See **Roadmap**.
 
 ## Quick start
 
@@ -128,6 +129,32 @@ missing routine, zero-workout history, no synced state, superset links, three 1R
 tools see consistent values regardless of when the suite runs. The pure lib functions have
 their own 92 tests in `frontend/src/lib/*.test.js`.
 
+## Deploying over HTTP (remote agent)
+
+stdio only works when the LLM client can spawn this process on the box that holds the data. An
+agent that runs elsewhere — a hosted LLM, or a client on a different machine than your `./data` —
+needs the streamable-HTTP transport instead. It is the same nine tools in a small container that
+reads the data volume beside the api and answers over HTTP, gated by a bearer token.
+
+Locally, without Docker:
+
+```bash
+OPENGYM_TOKEN=change-me OPENGYM_DATA=/path/to/openGym/data node src/http.js
+```
+
+With Docker compose, the `mcp` service is already in `docker-compose.yml`. Set `OPENGYM_TOKEN`
+in `.env` and bring it up — it mounts `opengym-data` read-only, so it can never write your data:
+
+```bash
+OPENGYM_TOKEN=$(openssl rand -hex 32) docker compose up -d --build mcp
+```
+
+The endpoint is `POST /` (MCP streamable HTTP) with `GET /health` for liveness. Point your agent
+at it with an `Authorization: Bearer <OPENGYM_TOKEN>` header; for Dokploy, add a domain that
+routes to the `mcp` service on port 3200 and give the agent that URL. A token is required — the
+server refuses to start without `OPENGYM_TOKEN`, because over a network the filesystem is no
+longer the boundary.
+
 ## Roadmap
 
 - **Done (Phase 1):** read-only stdio, 8 tools, direct `./data` access.
@@ -137,8 +164,8 @@ their own 92 tests in `frontend/src/lib/*.test.js`.
   admin dashboard (new `./data/tokens.json`) and a write-lock against the web UI's read-modify-
   write of `state-<uid>.json`. Tools: `log_workout`, `add_bodyweight`, `edit_routine`,
   `assign_weekday`, `override_day`.
-- **Phase 3:** Streamable HTTP transport, opt-in 4th container in `docker-compose.yml`. Same
-  tool implementations, second transport — the MCP SDK supports both behind one tool registration.
+- **Done (Phase 3):** streamable HTTP transport + a `mcp` container in `docker-compose.yml`,
+  gated by a bearer token. Same tool implementations, second transport.
 
 ## License
 

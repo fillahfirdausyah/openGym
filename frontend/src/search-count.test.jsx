@@ -30,8 +30,13 @@ function type(el, value) {
   Object.getOwnPropertyDescriptor(el.constructor.prototype, 'value').set.call(el, value)
   el.dispatchEvent(new Event('input', { bubbles: true }))
 }
-const chip = (host, text) => [...host.querySelectorAll('.chips .chip')].find(b => b.textContent.trim() === text)
 const count = host => host.querySelector('.search .search-count')
+// Pick a body part from the muscle filter's sheet (the three buttons replaced the chip strips).
+const pickBodyPart = (host, bp) => {
+  act(() => [...host.querySelectorAll('.filter-btn')].find(b => b.querySelector('.fb-name').textContent.trim() === 'Muscle').click())
+  const sheet = renderTopSheet()
+  act(() => [...sheet.querySelectorAll('.menu-item')].find(e => e.textContent.trim() === bp).click())
+}
 
 beforeEach(() => {
   useUI.setState({ sheets: [], toastMsg: '' })
@@ -70,11 +75,11 @@ describe('exercise search result count', () => {
 
     it(`${where}: counts a body-part filter too, and reads "1 exercise" for one`, () => {
       const host = open()
-      act(() => chip(host, 'neck').click())
+      pickBodyPart(host, 'neck')
       const neck = EXDB.filter(e => e.bp === 'neck').length
       expect(Number(count(host).textContent)).toBe(neck)
       const one = EXDB.find(e => searchExercises(EXDB, e.n).length === 1)
-      act(() => chip(host, 'All').click())
+      pickBodyPart(host, 'All')
       act(() => type(host.querySelector('.search input'), one.n))
       expect(count(host).textContent).toBe('1')
       expect(count(host).getAttribute('aria-label')).toBe('1 exercise')

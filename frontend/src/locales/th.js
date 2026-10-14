@@ -1,5 +1,7 @@
 // Thai UI strings. Keys are the English source strings (see lib/i18n.js).
 export default {
+  'Type': "ประเภท",
+  'Muscle': "กล้ามเนื้อ",
   // --- generic ---
   'Confirm': 'ยืนยัน',
   'Cancel': 'ยกเลิก',

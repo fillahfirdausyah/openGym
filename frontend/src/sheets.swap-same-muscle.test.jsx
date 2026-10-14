@@ -21,10 +21,15 @@ function renderTop() {
   act(() => root.render(sheet.render(() => useUI.getState().closeSheet(sheet.id))))
   return host
 }
-const chips = host => [...host.querySelectorAll('.chips .chip')]
-const chipByText = (host, text) => chips(host).find(b => b.textContent.trim() === text)
-const sameChip = host => chips(host).find(b => b.textContent.trim().startsWith('Same muscle'))
+// The three filter buttons replace the chip strips: the same-muscle scope lives in the muscle
+// filter's sheet, and the muscle button shows which scope is active.
+const filterBtn = (host, name) => [...host.querySelectorAll('.filter-btn')]
+  .find(b => b.querySelector('.fb-name').textContent.trim() === name)
 const isOn = el => el.className.split(/\s+/).includes('on')
+const openSheet = (host, name) => { act(() => filterBtn(host, name).click()); return renderTop() }
+const option = (sheet, text) => [...sheet.querySelectorAll('.menu-item')].find(e => e.textContent.trim() === text)
+const sameOption = sheet => [...sheet.querySelectorAll('.menu-item')].find(e => e.textContent.trim().startsWith('Same muscle'))
+const muscleValue = host => filterBtn(host, 'Muscle').querySelector('.fb-value').textContent
 const rows = host => [...host.querySelectorAll('.list .item:not(.ex-new)')].map(r => r.querySelector('.ss').textContent)
 
 // A cable triceps exercise: the catalogue has plenty of other triceps work, on cables and off.
@@ -68,10 +73,8 @@ describe('swap picker opens on the same muscle', () => {
     swapActiveWorkoutExercise(0)
     const host = renderTop()
 
-    const chip = sameChip(host)
-    expect(chip.textContent).toContain('Triceps')
-    expect(isOn(chip)).toBe(true)
-    expect(isOn(chipByText(host, 'All'))).toBe(false)
+    expect(muscleValue(host)).toContain('Triceps')
+    expect(isOn(filterBtn(host, 'Muscle'))).toBe(true)
 
     const listed = rows(host)
     expect(listed.length).toBeGreaterThan(1)
@@ -83,11 +86,12 @@ describe('swap picker opens on the same muscle', () => {
     // The exercise being swapped away is not offered as its own replacement.
     expect([...host.querySelectorAll('.list .item .tt')].map(x => x.textContent)).not.toContain(CABLE_TRI.n)
 
-    act(() => chipByText(host, 'All').click())
-    expect(isOn(chipByText(host, 'All'))).toBe(true)
+    // "All" is one tap back to the whole list.
+    { const it = option(openSheet(host, 'Muscle'), 'All'); act(() => it.click()) }
+    expect(isOn(filterBtn(host, 'Muscle'))).toBe(false)
     expect(rows(host).some(s => !s.startsWith('Triceps'))).toBe(true)
     // …and back again.
-    act(() => sameChip(host).click())
+    { const it = option(openSheet(host, 'Muscle'), 'Same muscle: Triceps'); act(() => it.click()) }
     expect(rows(host).every(s => s.startsWith('Triceps'))).toBe(true)
   })
 
@@ -96,15 +100,16 @@ describe('swap picker opens on the same muscle', () => {
     const pick = vi.fn()
     exercisePicker(pick, { title: 'Replace exercise', like: CABLE_TRI.id })
     const host = renderTop()
-    expect(isOn(sameChip(host))).toBe(true)
+    expect(isOn(filterBtn(host, 'Muscle'))).toBe(true)
     expect(rows(host).every(s => s.startsWith('Triceps'))).toBe(true)
   })
 
-  it('an add opens on the whole list, with no same-muscle chip', () => {
+  it('an add opens on the whole list, with no same-muscle option', () => {
     exercisePicker(vi.fn())
     const host = renderTop()
-    expect(sameChip(host)).toBeUndefined()
-    expect(isOn(chipByText(host, 'All'))).toBe(true)
+    expect(muscleValue(host)).toBe('All')
+    expect(isOn(filterBtn(host, 'Muscle'))).toBe(false)
+    expect(sameOption(openSheet(host, 'Muscle'))).toBeFalsy()
   })
 
   it('opens on All when nothing else trains that muscle, so a swap never starts on an empty list', () => {
@@ -115,7 +120,8 @@ describe('swap picker opens on the same muscle', () => {
     useStore.setState({ S, user: null })
     exercisePicker(vi.fn(), { like: 'cOnly' })
     const host = renderTop()
-    expect(isOn(chipByText(host, 'All'))).toBe(true)
-    expect(sameChip(host)).toBeUndefined()
+    expect(muscleValue(host)).toBe('All')
+    expect(isOn(filterBtn(host, 'Muscle'))).toBe(false)
+    expect(sameOption(openSheet(host, 'Muscle'))).toBeFalsy()
   })
 })

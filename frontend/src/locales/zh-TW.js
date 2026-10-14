@@ -1,4 +1,6 @@
 export default {
+  'Type': "類型",
+  'Muscle': "肌肉",
   'Confirm': '確認',
   'Cancel': '取消',
   'Press back again to exit': '再按一次返回以退出',
