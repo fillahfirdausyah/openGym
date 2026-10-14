@@ -155,6 +155,23 @@ routes to the `mcp` service on port 3200 and give the agent that URL. A token is
 server refuses to start without `OPENGYM_TOKEN`, because over a network the filesystem is no
 longer the boundary.
 
+### Connecting from claude.ai (or any client that can't set headers)
+
+claude.ai's custom-connector dialog has no field for a raw `Authorization` header on most
+accounts yet (Anthropic calls this "Request headers", and it's a limited beta — see
+[anthropics/claude-ai-mcp#112](https://github.com/anthropics/claude-ai-mcp/issues/112)). The only
+thing you control there is the server URL, so append the token as a query param instead:
+
+```
+https://mcp.yourdomain.com/?key=<OPENGYM_TOKEN>
+```
+
+Paste that as the connector URL and pick **"No sign-in"** under Authentication — "Sign in now" /
+"Register automatically" try an OAuth flow this server doesn't implement and will fail. A client
+that *can* set headers (Hermes, Claude Desktop, Cursor) should still use the `Authorization:
+Bearer` header; the query param only exists for the ones that can't, and a URL — unlike a header —
+lands in your reverse proxy's own access logs.
+
 ## Roadmap
 
 - **Done (Phase 1):** read-only stdio, 8 tools, direct `./data` access.

@@ -25,18 +25,26 @@ export async function createHttpServer({ token } = {}) {
   await server.connect(transport)
 
   const httpServer = http.createServer((req, res) => {
-    const pathname = (req.url || '/').split('?')[0]
+    const url = new URL(req.url || '/', 'http://opengym-mcp.internal')
 
     // Health first, unauthenticated: Dokploy/Traefik poll it, and it reveals nothing.
-    if (pathname === '/health') {
+    if (url.pathname === '/health') {
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify({ ok: true }))
       return
     }
 
-    if (token && req.headers.authorization !== `Bearer ${token}`) {
+    // Two ways in: a bearer header (what Hermes/Claude Desktop/Cursor send) or a `?key=` query
+    // param. The query param exists because claude.ai's custom-connector dialog has no way to
+    // set a raw Authorization header for most orgs (the "Request headers" feature is a limited
+    // beta) — its Remote MCP URL field is the only thing the user controls, so the token has to
+    // travel there instead. Trade-off: a URL (unlike a header) ends up in the host's own access
+    // logs. Acceptable for read-only training data behind a long random token; the header stays
+    // the tighter choice for anything that supports it.
+    const presented = req.headers.authorization === `Bearer ${token}` ? token : url.searchParams.get('key')
+    if (token && presented !== token) {
       res.writeHead(401, { 'content-type': 'application/json' })
-      res.end(JSON.stringify({ error: 'unauthorized — send "Authorization: Bearer <OPENGYM_TOKEN>"' }))
+      res.end(JSON.stringify({ error: 'unauthorized — send "Authorization: Bearer <OPENGYM_TOKEN>", or append "?key=<OPENGYM_TOKEN>" to the URL for a client that cannot set headers' }))
       return
     }
 
