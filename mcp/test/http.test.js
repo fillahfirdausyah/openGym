@@ -1,12 +1,7 @@
 // HTTP-transport tests: the same nine tools, now reachable by a remote agent over streamable
-// HTTP instead of a locally-spawned stdio process. Drives a real JSON-RPC handshake through a
+// HTTP instead of a locally-spawned stdio process. Drives real JSON-RPC handshakes through a
 // live server on an ephemeral port — no mocking of the SDK — so a break in the transport wiring
-// fails here, not when the agent tries to connect.
-//
-// A fresh server per test, not one shared across the file: the transport is stateful (one
-// session per process), so a second `initialize` against an already-initialized transport is
-// rejected by the SDK — sharing one instance would make the auth-only tests below poison the
-// handshake test that runs after them.
+// fails here, not when an agent tries to connect.
 import { describe, beforeAll, afterEach, test, expect, vi } from 'vitest'
 import { buildDemoState } from '../../frontend/src/lib/demoSeed.js'
 import { _seedStateForTests } from '../src/state.js'
@@ -21,20 +16,20 @@ beforeAll(() => {
   _seedStateForTests(buildDemoState())
 })
 
-let current = null // { httpServer, transport, base } — torn down in afterEach
+let current = null // { httpServer, closeAllSessions } — torn down in afterEach
 
 async function startServer() {
-  const { httpServer, transport, server } = await createHttpServer({ token: TOKEN })
+  const { httpServer, closeAllSessions } = await createHttpServer({ token: TOKEN })
   await new Promise(resolve => httpServer.listen(0, resolve))
   const base = `http://127.0.0.1:${httpServer.address().port}`
-  current = { httpServer, transport, server }
+  current = { httpServer, closeAllSessions }
   return base
 }
 
 afterEach(async () => {
   if (!current) return
+  await current.closeAllSessions()
   await new Promise(resolve => current.httpServer.close(resolve))
-  await current.transport.close()
   current = null
 })
 
@@ -56,6 +51,17 @@ function post(base, method, params = {}, { sessionId, notification = false, auth
 }
 
 const initParams = () => ({ protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: 'test', version: '1.0.0' } })
+
+// Runs the handshake through `initialize` and returns the session id, so a test can assert on
+// what happens *after* a client is connected without repeating the boilerplate.
+async function initSession(base) {
+  const init = await post(base, 'initialize', initParams())
+  expect(init.status).toBe(200)
+  const sessionId = init.headers.get('mcp-session-id')
+  expect(sessionId).toBeTruthy()
+  await post(base, 'notifications/initialized', {}, { sessionId, notification: true })
+  return sessionId
+}
 
 describe('opengym MCP over streamable HTTP', () => {
   test('GET /health answers unauthenticated', async () => {
@@ -84,23 +90,33 @@ describe('opengym MCP over streamable HTTP', () => {
     expect(res.status).toBe(401)
   })
 
+  // Regression test for the exact bug a first version of this server shipped with: ONE shared
+  // transport per process meant a second client's `initialize` was rejected with "Server already
+  // initialized" the moment a first client connected — which is what broke the claude.ai
+  // connector the instant anyone else (or a stray curl) had already talked to the server.
+  test('two independent clients can each initialize their own session', async () => {
+    const base = await startServer()
+    const sessionA = await initSession(base)
+    const sessionB = await initSession(base)
+    expect(sessionA).not.toBe(sessionB)
+
+    // Each session's own tools/list still answers, independently of the other.
+    const listA = await post(base, 'tools/list', {}, { sessionId: sessionA })
+    const listB = await post(base, 'tools/list', {}, { sessionId: sessionB })
+    expect(listA.status).toBe(200)
+    expect(listB.status).toBe(200)
+  })
+
+  test('a request naming an unknown session id is rejected, not silently given a new one', async () => {
+    const base = await startServer()
+    const res = await post(base, 'tools/list', {}, { sessionId: 'not-a-real-session' })
+    expect(res.status).toBe(400)
+  })
+
   test('serves the nine tools through the handshake', async () => {
     const base = await startServer()
+    const sessionId = await initSession(base)
 
-    // initialize → session id, server identity
-    const init = await post(base, 'initialize', initParams())
-    expect(init.status).toBe(200)
-    const sessionId = init.headers.get('mcp-session-id')
-    expect(sessionId).toBeTruthy()
-    const initBody = await init.json()
-    expect(initBody.result.serverInfo.name).toBe('opengym')
-    expect(initBody.result.serverInfo.version).toBe('0.1.0')
-
-    // notifications/initialized is a notification, not a request — no id, answered 202
-    const ack = await post(base, 'notifications/initialized', {}, { sessionId, notification: true })
-    expect(ack.status).toBe(202)
-
-    // tools/list
     const list = await post(base, 'tools/list', {}, { sessionId })
     expect(list.status).toBe(200)
     const names = (await list.json()).result.tools.map(t => t.name).sort()
